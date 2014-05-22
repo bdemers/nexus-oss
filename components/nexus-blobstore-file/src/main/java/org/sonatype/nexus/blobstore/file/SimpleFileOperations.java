@@ -22,6 +22,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 
+import javax.inject.Named;
+
 import org.sonatype.nexus.blobstore.file.utils.DigesterUtils;
 import org.sonatype.nexus.util.file.DirSupport;
 
