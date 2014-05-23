@@ -1,10 +1,21 @@
+/*
+ * Sonatype Nexus (TM) Open Source Version
+ * Copyright (c) 2007-2014 Sonatype, Inc.
+ * All rights reserved. Includes the third-party code listed at http://links.sonatype.com/products/nexus/oss/attributions.
+ *
+ * This program and the accompanying materials are made available under the terms of the Eclipse Public License Version 1.0,
+ * which accompanies this distribution and is available at http://www.eclipse.org/legal/epl-v10.html.
+ *
+ * Sonatype Nexus (TM) Professional Version is available from Sonatype, Inc. "Sonatype" and "Sonatype Nexus" are trademarks
+ * of Sonatype, Inc. Apache Maven is a trademark of the Apache Software Foundation. M2eclipse is a trademark of the
+ * Eclipse Foundation. All other trademarks are the property of their respective owners.
+ */
 package org.sonatype.nexus.blobstore.file.guice;
 
 import java.io.File;
 
 import javax.inject.Inject;
 import javax.inject.Named;
-import javax.inject.Provider;
 
 import org.sonatype.nexus.blobstore.api.BlobStore;
 import org.sonatype.nexus.blobstore.file.BlobMetadataStore;
@@ -16,9 +27,9 @@ import org.sonatype.nexus.blobstore.file.SimpleFileOperations;
 import org.sonatype.nexus.blobstore.file.kazuki.KazukiBlobMetadataStore;
 import org.sonatype.nexus.configuration.application.ApplicationDirectories;
 
-import com.google.common.io.Files;
 import com.google.inject.Key;
 import com.google.inject.PrivateModule;
+import com.google.inject.Provider;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import com.google.inject.name.Names;
@@ -31,6 +42,8 @@ import io.kazuki.v0.store.lifecycle.Lifecycle;
 import io.kazuki.v0.store.lifecycle.LifecycleModule;
 import io.kazuki.v0.store.schema.SchemaStore;
 import io.kazuki.v0.store.sequence.SequenceServiceConfiguration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.sonatype.nexus.blobstore.file.kazuki.KazukiBlobMetadataStore.METADATA_TYPE;
@@ -38,7 +51,6 @@ import static org.sonatype.nexus.blobstore.file.kazuki.KazukiBlobMetadataStore.M
 /**
  * @since 3.0
  */
-// TODO Rename this '..Module' and get rid of the other module, refactor all other tests to use this
 public class FileBlobStoreModule
     extends PrivateModule
 {
@@ -48,6 +60,8 @@ public class FileBlobStoreModule
 
   private static final String KZ_DB_LOCATION = "fileblobstore-kazukidb-location";
 
+  private final Logger log = LoggerFactory.getLogger(FileBlobStoreModule.class);
+
   @Inject
   public FileBlobStoreModule(final String name) {
     this.name = checkNotNull(name, "name");
@@ -55,9 +69,6 @@ public class FileBlobStoreModule
 
   @Override
   protected void configure() {
-
-    bind(String.class).annotatedWith(Names.named(KZ_DB_NAME)).toInstance(name);
-
     bind(FileOperations.class).to(SimpleFileOperations.class).in(Scopes.SINGLETON);
 
     bind(JdbiDataSourceConfiguration.class).annotatedWith(Names.named(name)).toProvider(
@@ -122,21 +133,23 @@ public class FileBlobStoreModule
   }
 
   @Provides
-  FilePathPolicy provideFilePathPolicy() {
-    // TODO: Parameterize this in some appropriate manner.
-    return new HashingSubdirFileLocationPolicy(Files.createTempDir().toPath().resolve(name));
+  FilePathPolicy provideFilePathPolicy(final ApplicationDirectories applicationDirectories) {
+    final File workDirectory = applicationDirectories.getWorkDirectory("fileblobstore/" + name + "/content");
+    return new HashingSubdirFileLocationPolicy(workDirectory.toPath());
   }
 
   @Provides
   @Named(KZ_DB_LOCATION)
-  File provideKazukiDatabaseLocation(@Named(KZ_DB_NAME) final String kazukiDbName,
-                                     final ApplicationDirectories applicationDirectories)
-  {
-    File dir = applicationDirectories.getWorkDirectory("db/" + name);
+  File provideKazukiDatabaseLocation(final ApplicationDirectories applicationDirectories) {
+    File dir = applicationDirectories.getWorkDirectory("fileblobstore/" + name + "/db");
+    log.info("File blob store {} metadata stored in Kazuki db: {}", name, dir);
     File file = new File(dir, dir.getName());
     return file.getAbsoluteFile();
   }
 
+  /**
+   * Using a provider class here is necessary so that the provider can be bound to an arbitrary {@code @Name}.
+   */
   static class JdbiDsConfigProvider
       implements Provider<JdbiDataSourceConfiguration>
   {
