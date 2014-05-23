@@ -57,8 +57,6 @@ import static java.util.Arrays.asList;
 /**
  * A Kazuki-backed implementation of the {@link BlobMetadataStore}.
  *
- * TODO: Consider using Kazuki's metadata keys as the blob IDs, as that would really, really simplify searching.
- *
  * @since 3.0
  */
 public class KazukiBlobMetadataStore
@@ -240,7 +238,6 @@ public class KazukiBlobMetadataStore
         // Concurrent modification can cause objects in an iterator to return null.
         continue;
       }
-
 
       if (BlobState.ALIVE.equals(metadata.getBlobState())) {
         blobCount++;

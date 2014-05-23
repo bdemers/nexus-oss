@@ -29,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
@@ -79,11 +80,17 @@ public class FileBlobStoreModuleTest
   }
 
   @Test
-  public void createABlob() {
+  public void establishBlobStoresAreIndependent() {
     blobStoreA.create(new ByteArrayInputStream(new byte[100]),
         ImmutableMap.of(BlobStore.BLOB_NAME_HEADER, "name", BlobStore.CREATED_BY_HEADER, "michael"));
+
+    assertThat(blobStoreA.getMetrics().getBlobCount(), is(equalTo(1L)));
+    assertThat(blobStoreB.getMetrics().getBlobCount(), is(equalTo(0L)));
+
     blobStoreB.create(new ByteArrayInputStream(new byte[100]),
         ImmutableMap.of(BlobStore.BLOB_NAME_HEADER, "name", BlobStore.CREATED_BY_HEADER, "michael"));
+
+    assertThat(blobStoreB.getMetrics().getBlobCount(), is(equalTo(1L)));
   }
 
 

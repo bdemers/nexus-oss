@@ -26,6 +26,7 @@ import org.sonatype.nexus.blobstore.file.HashingSubdirFileLocationPolicy;
 import org.sonatype.nexus.blobstore.file.SimpleFileOperations;
 import org.sonatype.nexus.blobstore.file.kazuki.KazukiBlobMetadataStore;
 import org.sonatype.nexus.configuration.application.ApplicationDirectories;
+import org.sonatype.sisu.goodies.lifecycle.Lifecycle;
 
 import com.google.inject.Key;
 import com.google.inject.PrivateModule;
@@ -38,7 +39,6 @@ import io.kazuki.v0.store.index.SecondaryIndexStore;
 import io.kazuki.v0.store.jdbi.JdbiDataSourceConfiguration;
 import io.kazuki.v0.store.keyvalue.KeyValueStore;
 import io.kazuki.v0.store.keyvalue.KeyValueStoreConfiguration;
-import io.kazuki.v0.store.lifecycle.Lifecycle;
 import io.kazuki.v0.store.lifecycle.LifecycleModule;
 import io.kazuki.v0.store.schema.SchemaStore;
 import io.kazuki.v0.store.sequence.SequenceServiceConfiguration;
@@ -49,6 +49,17 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static org.sonatype.nexus.blobstore.file.kazuki.KazukiBlobMetadataStore.METADATA_TYPE;
 
 /**
+ * A Guice module for creating filesystem-based {@link BlobStore} instances. The name provided to the constructor must
+ * be unique across an instance of Nexus, and is used to locate the Kazuki database and the blob store's content
+ * directory.
+ *
+ * This private module exposes two beans:
+ *
+ * <ul>
+ * <li>a {@link BlobStore} {@code @Named(<name constructor parameter>)} </li>
+ * <li>a {@link Lifecycle} {@code @Named(<name constructor parameter>)} </li>
+ * </ul>
+ *
  * @since 3.0
  */
 public class FileBlobStoreModule
@@ -56,12 +67,13 @@ public class FileBlobStoreModule
 {
   private final String name;
 
-  private static final String KZ_DB_NAME = "fileblobstore-kazukidb-name";
-
   private static final String KZ_DB_LOCATION = "fileblobstore-kazukidb-location";
 
   private final Logger log = LoggerFactory.getLogger(FileBlobStoreModule.class);
 
+  /**
+   * The {@code name} parameter must be unique across all of Nexus.
+   */
   @Inject
   public FileBlobStoreModule(final String name) {
     this.name = checkNotNull(name, "name");
@@ -69,32 +81,33 @@ public class FileBlobStoreModule
 
   @Override
   protected void configure() {
-    bind(FileOperations.class).to(SimpleFileOperations.class).in(Scopes.SINGLETON);
 
+    // Create and expose blob store itself
+    bind(BlobStore.class).annotatedWith(Names.named(name)).to(FileBlobStore.class);
+    bind(FileOperations.class).to(SimpleFileOperations.class).in(Scopes.SINGLETON);
+    expose(BlobStore.class).annotatedWith(Names.named(name));
+
+    // Create the metadata store and expose its Lifecycle
+    bind(BlobMetadataStore.class).to(KazukiBlobMetadataStore.class).in(
+        Scopes.SINGLETON);
+    bind(Lifecycle.class).annotatedWith(Names.named(name))
+        .to(KazukiBlobMetadataStore.class);
+    expose(Lifecycle.class).annotatedWith(Names.named(name));
+
+    // Create the Kazuki database the metadata store needs
     bind(JdbiDataSourceConfiguration.class).annotatedWith(Names.named(name)).toProvider(
         JdbiDsConfigProvider.class);
 
-    bindKazukiBlobMetadataStoreDependency(Lifecycle.class);
-    bindKazukiBlobMetadataStoreDependency(KeyValueStore.class);
-    bindKazukiBlobMetadataStoreDependency(SchemaStore.class);
-    bindKazukiBlobMetadataStoreDependency(SecondaryIndexStore.class);
-
-    bind(BlobMetadataStore.class).to(KazukiBlobMetadataStore.class).in(
-        Scopes.SINGLETON);
-    bind(org.sonatype.sisu.goodies.lifecycle.Lifecycle.class).annotatedWith(Names.named(name))
-        .to(KazukiBlobMetadataStore.class);
-    expose(org.sonatype.sisu.goodies.lifecycle.Lifecycle.class).annotatedWith(Names.named(name));
-
-    bind(BlobStore.class).annotatedWith(Names.named(name)).to(FileBlobStore.class);
-    expose(BlobStore.class).annotatedWith(Names.named(name));
-
-    // Kazuki lifecycle management
     install(new LifecycleModule(name));
 
-    // Kazuki key-value store
     install(new EasyKeyValueStoreModule(name, null)
         .withSequenceConfig(getSequenceServiceConfiguration())
         .withKeyValueStoreConfig(getKeyValueStoreConfiguration()));
+
+    bindKazukiBlobMetadataStoreDependency(io.kazuki.v0.store.lifecycle.Lifecycle.class);
+    bindKazukiBlobMetadataStoreDependency(KeyValueStore.class);
+    bindKazukiBlobMetadataStoreDependency(SchemaStore.class);
+    bindKazukiBlobMetadataStoreDependency(SecondaryIndexStore.class);
   }
 
   /**
