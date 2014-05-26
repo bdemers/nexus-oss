@@ -81,8 +81,10 @@ public class FileBlobStoreModule
 
   @Override
   protected void configure() {
+    binder().requireExplicitBindings();
 
     // Create and expose blob store itself
+    bind(String.class).annotatedWith(Names.named(FileBlobStore.FILE_BLOB_STORE_NAME_BINDING)).toInstance(name);
     bind(BlobStore.class).annotatedWith(Names.named(name)).to(FileBlobStore.class);
     bind(FileOperations.class).to(SimpleFileOperations.class).in(Scopes.SINGLETON);
     expose(BlobStore.class).annotatedWith(Names.named(name));
