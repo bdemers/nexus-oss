@@ -55,6 +55,7 @@ public class NexusModules
   {
     @Override
     protected void configure() {
+      binder().requireExplicitBindings();
       install(new ShiroAopModule());
       install(new InstrumentationModule());
       install(new BvalModule());
